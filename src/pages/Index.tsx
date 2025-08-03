@@ -1021,7 +1021,7 @@ const TemplateFillSelector: React.FC<{
                       <h3 className="font-semibold text-lg">{template.name}</h3>
                       <div className="flex items-center space-x-4 mt-2 text-sm text-muted-foreground">
                         <span>{template.sections.length} sections</span>
-                        <span>0 fields</span>
+                        <span>{template.sections.reduce((acc, section) => acc + section.fields.length, 0)} fields</span>
                         <span>{new Date(template.updatedAt).toLocaleDateString()}</span>
                       </div>
                     </div>
@@ -1040,7 +1040,7 @@ const TemplateFillSelector: React.FC<{
 };
 
 // Main App Component
-const Index = () => {
+const AppContent = () => {
   const [currentView, setCurrentView] = useState<'list' | 'builder' | 'filler' | 'fill-selector'>('list');
   const [selectedTemplate, setSelectedTemplate] = useState<FormTemplate | null>(null);
 
@@ -1066,8 +1066,11 @@ const Index = () => {
     setCurrentView('filler');
   };
 
+  const { saveTemplate: saveToContext } = useAppContext();
+  
   const saveTemplate = (template: FormTemplate) => {
-    // This will be handled by the context
+    saveToContext(template);
+    setCurrentView('list');
   };
 
   const showFillSelector = () => {
@@ -1075,7 +1078,7 @@ const Index = () => {
   };
 
   return (
-    <AppProvider>
+    <>
       {currentView === 'list' && (
         <TemplateList 
           onCreateTemplate={createNewTemplate}
@@ -1106,6 +1109,14 @@ const Index = () => {
           onBack={() => setCurrentView('list')}
         />
       )}
+    </>
+  );
+};
+
+const Index = () => {
+  return (
+    <AppProvider>
+      <AppContent />
     </AppProvider>
   );
 };
