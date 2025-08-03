@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { DragDropContext, DropResult } from 'react-beautiful-dnd';
 import { Plus, Save, Eye, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,23 @@ import { FieldTypeSelector } from './FieldTypeSelector';
 import { SectionEditor } from './SectionEditor';
 import { FormRenderer } from './FormRenderer';
 import { useAppContext } from '@/context/AppContext';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
 
 interface TemplateBuilderProps {
   template: FormTemplate;
@@ -21,8 +38,25 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
   onBack,
 }) => {
   const [currentTemplate, setCurrentTemplate] = useState<FormTemplate>(template);
+  const [originalTemplate] = useState<FormTemplate>(template);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const { saveTemplate } = useAppContext();
+
+
+  const isTemplateValid =
+    currentTemplate.name.trim() !== '' &&
+    currentTemplate.sections.length > 0 &&
+    currentTemplate.sections.some(section => section.fields.length > 0);
+
+  useEffect(() => {
+    if (JSON.stringify(currentTemplate) !== JSON.stringify(originalTemplate)) {
+      setIsDirty(true);
+    } else {
+      setIsDirty(false);
+    }
+  }, [currentTemplate, originalTemplate]);
 
   const updateTemplateName = (name: string) => {
     setCurrentTemplate(prev => ({ ...prev, name }));
@@ -60,10 +94,11 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
     const completeField: FormField = {
       id: field.id || `field_${Date.now()}`,
       type: field.type || 'text',
-      label: field.label || '',
+      label: field.label || 'New Field',
       labelStyle: field.labelStyle,
       options: field.options,
-      required: field.required ?? true,
+      required: field.required ?? false,
+      value: field.type === 'boolean' ? false : '',
     };
 
     setCurrentTemplate(prev => ({
@@ -76,26 +111,52 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
     }));
   };
 
+  const updateFieldInSection = useCallback((sectionId: string, fieldId: string, updatedProperties: Partial<FormField>) => {
+    setCurrentTemplate(prev => ({
+      ...prev,
+      sections: prev.sections.map(section => {
+        if (section.id === sectionId) {
+          return {
+            ...section,
+            fields: section.fields.map(field => {
+              if (field.id === fieldId) {
+                return { ...field, ...updatedProperties };
+              }
+              return field;
+            }),
+          };
+        }
+        return section;
+      }),
+    }));
+  }, []);
+
+
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
-
     const { source, destination } = result;
-
     if (source.droppableId === destination.droppableId) {
       const section = currentTemplate.sections.find(s => s.id === source.droppableId);
       if (!section) return;
-
       const newFields = Array.from(section.fields);
       const [reorderedField] = newFields.splice(source.index, 1);
       newFields.splice(destination.index, 0, reorderedField);
-
       updateSection({ ...section, fields: newFields });
     }
   };
 
   const handleSave = () => {
+    if (!isTemplateValid) return;
     saveTemplate(currentTemplate);
     onSave(currentTemplate);
+  };
+
+  const handleBack = () => {
+    if (isDirty) {
+      setIsAlertOpen(true);
+    } else {
+      onBack();
+    }
   };
 
   if (showPreview) {
@@ -124,10 +185,14 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       <div className="min-h-screen bg-background flex">
         <FieldTypeSelector
           onAddField={(field) => {
-            if (currentTemplate.sections.length === 0) {
-              addSection();
+            let targetSectionId = currentTemplate.sections[currentTemplate.sections.length - 1]?.id;
+            if (!targetSectionId) {
+                const newSectionId = `section_${Date.now()}`;
+                const newSection: FormSection = { id: newSectionId, title: 'New Section', fields: [] };
+                setCurrentTemplate(prev => ({ ...prev, sections: [...prev.sections, newSection] }));
+                targetSectionId = newSectionId;
             }
-            addFieldToSection(currentTemplate.sections[currentTemplate.sections.length - 1].id, field);
+            addFieldToSection(targetSectionId, field);
           }}
         />
 
@@ -135,7 +200,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           <div className="border-b border-border p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <Button variant="ghost" onClick={onBack}>
+                <Button variant="ghost" onClick={handleBack}>
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back
                 </Button>
@@ -151,10 +216,23 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                   <Eye className="h-4 w-4 mr-2" />
                   Preview
                 </Button>
-                <Button onClick={handleSave}>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Template
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div tabIndex={0}>
+                        <Button onClick={handleSave} disabled={!isTemplateValid}>
+                          <Save className="h-4 w-4 mr-2" />
+                          Save Template
+                        </Button>
+                      </div>
+                    </TooltipTrigger>
+                    {!isTemplateValid && (
+                      <TooltipContent>
+                        <p>Please add a name and at least one field to save.</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             </div>
           </div>
@@ -166,6 +244,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                 section={section}
                 onUpdateSection={updateSection}
                 onDeleteSection={deleteSection}
+                onUpdateField={updateFieldInSection}
               />
             ))}
 
@@ -180,6 +259,25 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           </div>
         </div>
       </div>
+      <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>You have unsaved changes!</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to leave? Your changes will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={onBack} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Discard & Exit
+            </AlertDialogAction>
+            <AlertDialogAction onClick={() => { handleSave(); onBack(); }}>
+                Save & Exit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DragDropContext>
   );
 };

@@ -5,6 +5,7 @@ export interface FormField {
   labelStyle?: 'h1' | 'h2' | 'h3';
   options?: string[];
   required?: boolean;
+  value?: any;
 }
 
 export interface FormSection {
