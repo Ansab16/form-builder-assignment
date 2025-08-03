@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { DragDropContext, DropResult } from 'react-beautiful-dnd';
 import { Plus, Save, Eye, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -38,28 +38,24 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
   onBack,
 }) => {
   const [currentTemplate, setCurrentTemplate] = useState<FormTemplate>(template);
-  const [originalTemplate] = useState<FormTemplate>(template);
   const [isDirty, setIsDirty] = useState(false);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const { saveTemplate } = useAppContext();
 
-
+  // --- UPDATED SAVE VALIDATION LOGIC ---
   const isTemplateValid =
     currentTemplate.name.trim() !== '' &&
     currentTemplate.sections.length > 0 &&
-    currentTemplate.sections.some(section => section.fields.length > 0);
+    // This now checks for at least one field that is NOT a 'label'
+    currentTemplate.sections.some(section =>
+        section.fields.some(field => field.type !== 'label')
+    );
 
-  useEffect(() => {
-    if (JSON.stringify(currentTemplate) !== JSON.stringify(originalTemplate)) {
-      setIsDirty(true);
-    } else {
-      setIsDirty(false);
-    }
-  }, [currentTemplate, originalTemplate]);
-
+  // State update functions now manually set the 'isDirty' flag.
   const updateTemplateName = (name: string) => {
     setCurrentTemplate(prev => ({ ...prev, name }));
+    setIsDirty(true);
   };
 
   const addSection = () => {
@@ -72,6 +68,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       ...prev,
       sections: [...prev.sections, newSection],
     }));
+    setIsDirty(true);
   };
 
   const updateSection = (updatedSection: FormSection) => {
@@ -81,6 +78,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         section.id === updatedSection.id ? updatedSection : section
       ),
     }));
+    setIsDirty(true);
   };
 
   const deleteSection = (sectionId: string) => {
@@ -88,6 +86,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       ...prev,
       sections: prev.sections.filter(section => section.id !== sectionId),
     }));
+    setIsDirty(true);
   };
 
   const addFieldToSection = (sectionId: string, field: Partial<FormField>) => {
@@ -109,6 +108,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           : section
       ),
     }));
+    setIsDirty(true);
   };
 
   const updateFieldInSection = useCallback((sectionId: string, fieldId: string, updatedProperties: Partial<FormField>) => {
@@ -129,6 +129,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         return section;
       }),
     }));
+    setIsDirty(true);
   }, []);
 
 
@@ -149,6 +150,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
     if (!isTemplateValid) return;
     saveTemplate(currentTemplate);
     onSave(currentTemplate);
+    setIsDirty(false);
   };
 
   const handleBack = () => {
@@ -228,7 +230,7 @@ export const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                     </TooltipTrigger>
                     {!isTemplateValid && (
                       <TooltipContent>
-                        <p>Please add a name and at least one field to save.</p>
+                        <p>Please add a name and at least one input field.</p>
                       </TooltipContent>
                     )}
                   </Tooltip>
